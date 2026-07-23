@@ -1,105 +1,127 @@
-{% extends "base.html" %}
-{% block content %}
-<div class="dashboard">
-    <div class="status-bar">
-        <div class="status-item connection" id="connection-status">
-            <span class="status-dot"></span>
-            <span id="conn-text">{{ locale.deconnecte }}</span>
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#1a73e8">
+    <title>Gestion d'Énergie</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">Gestion d'Énergie</div>
+        <div class="nav-lang">
+            <button onclick="setLang('fr')" class="lang-btn">FR</button>
+            <button onclick="setLang('en')" class="lang-btn">EN</button>
         </div>
-        <div class="status-item mode-control">
-            <span id="mode-label">{{ locale.mode_auto }}</span>
-            <select id="mode-select" onchange="changeMode(this.value)">
-                <option value="auto">{{ locale.mode_auto }}</option>
-                <option value="manuel">{{ locale.mode_manuel }}</option>
-            </select>
-            <select id="source-select" disabled onchange="forceSource(this.value)">
-                <option value="solaire">{{ locale.solaire }}</option>
-                <option value="batterie">{{ locale.batterie }}</option>
-                <option value="jirama">{{ locale.jirama }}</option>
-                <option value="groupe">{{ locale.groupe }}</option>
-            </select>
-        </div>
-    </div>
-
-    <div class="cards-grid">
-        <div class="card source-card" id="card-solaire">
-            <div class="card-header">{{ locale.solaire }}</div>
-            <div class="card-body">
-                <div class="card-value" id="solaire-power">0 W</div>
-                <div class="card-detail">
-                    <span>{{ locale.voltage }}: <span id="solaire-voltage">0</span>V</span>
-                    <span>{{ locale.current }}: <span id="solaire-current">0</span>A</span>
+    </nav>
+    <main>
+        <div class="dashboard">
+            <div class="status-bar">
+                <div class="status-item connection" id="connection-status">
+                    <span class="status-dot disconnected" id="conn-dot"></span>
+                    <span id="conn-text">Déconnecté</span>
+                </div>
+                <div class="status-item mode-control">
+                    <span id="mode-label">Auto</span>
+                    <select id="mode-select" onchange="changeMode(this.value)">
+                        <option value="auto">Auto</option>
+                        <option value="manuel">Manuel</option>
+                    </select>
+                    <select id="source-select" disabled onchange="forceSource(this.value)">
+                        <option value="solaire">Solaire</option>
+                        <option value="batterie">Batterie</option>
+                        <option value="jirama">JIRAMA</option>
+                        <option value="groupe">Groupe</option>
+                    </select>
                 </div>
             </div>
-        </div>
-        <div class="card source-card" id="card-batterie">
-            <div class="card-header">{{ locale.batterie }}</div>
-            <div class="card-body">
-                <div class="card-value" id="batterie-power">0 W</div>
-                <div class="card-soc">
-                    <div class="soc-bar">
-                        <div class="soc-fill" id="batterie-soc-fill" style="width:0%"></div>
+
+            <div class="cards-grid">
+                <div class="card source-card" id="card-solaire">
+                    <div class="card-header">Solaire</div>
+                    <div class="card-body">
+                        <div class="card-value" id="solaire-power">0 W</div>
+                        <div class="card-detail">
+                            <span>Tension: <span id="solaire-voltage">0</span>V</span>
+                            <span>Courant: <span id="solaire-current">0</span>A</span>
+                        </div>
                     </div>
-                    <span id="batterie-soc-text">0%</span>
                 </div>
-                <div class="card-detail">
-                    <span>{{ locale.voltage }}: <span id="batterie-voltage">0</span>V</span>
-                    <span id="batterie-flow">{{ locale.idle }}</span>
+                <div class="card source-card" id="card-batterie">
+                    <div class="card-header">Batterie</div>
+                    <div class="card-body">
+                        <div class="card-value" id="batterie-power">0 W</div>
+                        <div class="card-soc">
+                            <div class="soc-bar">
+                                <div class="soc-fill" id="batterie-soc-fill" style="width:0%"></div>
+                            </div>
+                            <span id="batterie-soc-text">0%</span>
+                        </div>
+                        <div class="card-detail">
+                            <span>Tension: <span id="batterie-voltage">0</span>V</span>
+                            <span id="batterie-flow">Inactif</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="card source-card" id="card-jirama">
+                    <div class="card-header">JIRAMA</div>
+                    <div class="card-body">
+                        <div class="card-value" id="jirama-power">0 W</div>
+                        <div class="card-detail">
+                            <span>Tension: <span id="jirama-voltage">0</span>V</span>
+                            <span>État: <span id="jirama-status" class="status-badge inactive">Inactif</span></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="card source-card" id="card-groupe">
+                    <div class="card-header">Groupe</div>
+                    <div class="card-body">
+                        <div class="card-value" id="groupe-power">0 W</div>
+                        <div class="card-detail">
+                            <span>Tension: <span id="groupe-voltage">0</span>V</span>
+                            <span>État: <span id="groupe-status" class="status-badge inactive">Inactif</span></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="card source-card" id="card-consommation">
+                    <div class="card-header">Consommation</div>
+                    <div class="card-body">
+                        <div class="card-value" id="conso-power">0 W</div>
+                        <div class="card-detail">
+                            <span>Tension: <span id="conso-voltage">0</span>V</span>
+                            <span>Courant: <span id="conso-current">0</span>A</span>
+                        </div>
+                    </div>
                 </div>
             </div>
-        </div>
-        <div class="card source-card" id="card-jirama">
-            <div class="card-header">{{ locale.jirama }}</div>
-            <div class="card-body">
-                <div class="card-value" id="jirama-power">0 W</div>
-                <div class="card-detail">
-                    <span>{{ locale.voltage }}: <span id="jirama-voltage">0</span>V</span>
-                    <span>{{ locale.status }}: <span id="jirama-status" class="status-badge">{{ locale.inactif }}</span></span>
-                </div>
-            </div>
-        </div>
-        <div class="card source-card" id="card-groupe">
-            <div class="card-header">{{ locale.groupe }}</div>
-            <div class="card-body">
-                <div class="card-value" id="groupe-power">0 W</div>
-                <div class="card-detail">
-                    <span>{{ locale.voltage }}: <span id="groupe-voltage">0</span>V</span>
-                    <span>{{ locale.status }}: <span id="groupe-status" class="status-badge">{{ locale.inactif }}</span></span>
-                </div>
-            </div>
-        </div>
-        <div class="card source-card" id="card-consommation">
-            <div class="card-header">{{ locale.consommation }}</div>
-            <div class="card-body">
-                <div class="card-value" id="conso-power">0 W</div>
-                <div class="card-detail">
-                    <span>{{ locale.voltage }}: <span id="conso-voltage">0</span>V</span>
-                    <span>{{ locale.current }}: <span id="conso-current">0</span>A</span>
-                </div>
-            </div>
-        </div>
-    </div>
 
-    <div class="charts-grid">
-        <div class="card chart-card">
-            <div class="card-header">{{ locale.production }} / {{ locale.consommation }}</div>
-            <canvas id="chart-power"></canvas>
-        </div>
-        <div class="card chart-card">
-            <div class="card-header">{{ locale.batterie }} SOC</div>
-            <canvas id="chart-soc"></canvas>
-        </div>
-    </div>
+            <div class="charts-grid">
+                <div class="card chart-card">
+                    <div class="card-header">Production / Consommation</div>
+                    <canvas id="chart-power"></canvas>
+                </div>
+                <div class="card chart-card">
+                    <div class="card-header">Batterie SOC</div>
+                    <canvas id="chart-soc"></canvas>
+                </div>
+            </div>
 
-    <div class="bottom-grid">
-        <div class="card events-card">
-            <div class="card-header">{{ locale.evenements }}</div>
-            <div class="card-body" id="events-list"></div>
+            <div class="bottom-grid">
+                <div class="card events-card">
+                    <div class="card-header">Événements</div>
+                    <div class="card-body" id="events-list"></div>
+                </div>
+                <div class="card forecast-card">
+                    <div class="card-header">Prévisions</div>
+                    <div class="card-body" id="forecast-list"></div>
+                </div>
+            </div>
         </div>
-        <div class="card forecast-card">
-            <div class="card-header">{{ locale.previsions }}</div>
-            <div class="card-body" id="forecast-list"></div>
-        </div>
-    </div>
-</div>
-{% endblock %}
+    </main>
+    <script src="/static/js/socket-client.js"></script>
+    <script src="/static/js/dashboard.js"></script>
+    <script src="/static/js/charts.js"></script>
+</body>
+</html>

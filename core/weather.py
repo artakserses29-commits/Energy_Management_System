@@ -1,7 +1,7 @@
+import json
 import math
+import urllib.request
 from datetime import datetime, timedelta
-
-import requests
 
 from config.settings import OWM_API_KEY, OWM_LAT, OWM_LON
 from data.database import Database
@@ -22,10 +22,8 @@ class WeatherForecast:
                 f"&exclude=current,minutely,hourly,alerts"
                 f"&appid={OWM_API_KEY}&units=metric&lang=fr"
             )
-            resp = requests.get(url, timeout=10)
-            if resp.status_code != 200:
-                return
-            data = resp.json()
+            resp = urllib.request.urlopen(url, timeout=10)
+            data = json.loads(resp.read().decode())
             self._process_forecast(data["daily"])
         except Exception as e:
             print(f"[Weather] Erreur: {e}")

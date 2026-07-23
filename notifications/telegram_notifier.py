@@ -1,4 +1,5 @@
-import requests
+import json
+import urllib.request
 
 from config.settings import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 
@@ -16,13 +17,15 @@ class TelegramNotifier:
             return False
         try:
             url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-            payload = {
+            payload = json.dumps({
                 "chat_id": TELEGRAM_CHAT_ID,
                 "text": text[:4096],
                 "parse_mode": "HTML",
-            }
-            resp = requests.post(url, json=payload, timeout=10)
-            return resp.status_code == 200
+            }).encode()
+            req = urllib.request.Request(url, data=payload,
+                                         headers={"Content-Type": "application/json"})
+            resp = urllib.request.urlopen(req, timeout=10)
+            return resp.status == 200
         except Exception as e:
             print(f"[Telegram] Erreur: {e}")
             return False

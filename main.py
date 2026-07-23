@@ -1,21 +1,14 @@
-import sys
 import threading
 import time
-from urllib.request import urlopen
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
-from config.settings import MEASURE_INTERVAL_SECONDS, OWM_FORECAST_INTERVAL_HOURS, FLASK_PORT
+from config.settings import MEASURE_INTERVAL_SECONDS, OWM_FORECAST_INTERVAL_HOURS, FLASK_HOST, FLASK_PORT
 from core.energy_manager import EnergyManager
 from core.weather import WeatherForecast
 from data.database import Database
 from hardware.pzem_reader import PZEMReader
-from web.app import create_app
-
-try:
-    from waitress import serve
-except ImportError:
-    serve = None
+from webserver import run_server
 
 shutdown = threading.Event()
 scheduler = BackgroundScheduler()
@@ -90,30 +83,15 @@ def main():
     t2 = threading.Thread(target=weather_loop, daemon=True)
     t1.start()
     t2.start()
-
-    app = create_app()
-    host = "127.0.0.1"
-    url = f"http://{host}:{FLASK_PORT}"
-    print(f"Serveur web: {url}")
-    print("Ouvrez http://127.0.0.1:5000 dans votre navigateur.")
-    print("Ctrl+C pour arreter.")
+    print("Threads mesure et meteo demarres.")
 
     try:
-        if serve:
-            serve(app, host=host, port=FLASK_PORT)
-        else:
-            app.run(host=host, port=FLASK_PORT, debug=False, use_reloader=False)
-    except KeyboardInterrupt:
-        pass
-    except SystemExit:
-        pass
-    except Exception as e:
-        print(f"Erreur serveur: {e}")
-
-    shutdown.set()
-    print("Arret en cours...")
-    scheduler.shutdown(wait=False)
-    print("Systeme arrete.")
+        run_server(host="127.0.0.1", port=FLASK_PORT)
+    finally:
+        shutdown.set()
+        print("Arret en cours...")
+        scheduler.shutdown(wait=False)
+        print("Systeme arrete.")
 
 
 if __name__ == "__main__":
