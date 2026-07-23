@@ -44,8 +44,8 @@ def get_solar_state(solar_power):
 
 def get_battery_flow(solar_power, consommation_power):
     diff = solar_power - consommation_power
-    if diff > POWER_THRESHOLD_COMPLEMENT:
+    if diff >= POWER_THRESHOLD_COMPLEMENT:
         return "charge", abs(diff)
-    elif diff < -POWER_THRESHOLD_COMPLEMENT:
+    elif diff <= -POWER_THRESHOLD_COMPLEMENT:
         return "decharge", abs(diff)
     return "idle", 0
