@@ -12,3 +12,5 @@ config/settings.py
 *.egg-info/
 dist/
 build/
+*.db-shm
+*.db-wal
