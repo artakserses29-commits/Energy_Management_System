@@ -1,0 +1,10 @@
+Flask==3.0.3
+Flask-SocketIO==5.3.6
+python-socketio==5.11.4
+python-engineio==4.9.1
+minimalmodbus==2.1.1
+pyserial==3.5
+RPi.GPIO==0.7.1
+APScheduler==3.10.4
+requests==2.31.0
+gunicorn==22.0.0
