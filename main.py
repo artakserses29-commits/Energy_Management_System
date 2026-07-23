@@ -1,11 +1,10 @@
-import signal
 import sys
 import threading
 import time
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
-from config.settings import MEASURE_INTERVAL_SECONDS, OWM_FORECAST_INTERVAL_HOURS, FLASK_HOST, FLASK_PORT
+from config.settings import MEASURE_INTERVAL_SECONDS, OWM_FORECAST_INTERVAL_HOURS, FLASK_PORT
 from core.energy_manager import EnergyManager
 from core.weather import WeatherForecast
 from data.database import Database
@@ -13,23 +12,21 @@ from hardware.pzem_reader import PZEMReader
 from hardware.relay_controller import RelayController
 from web.app import create_app
 
+shutdown = threading.Event()
 scheduler = BackgroundScheduler()
-running = True
-
-
-def signal_handler(sig, frame):
-    global running
-    running = False
-    print("\nArrêt du système...")
 
 
 def measurement_loop():
-    pzem = PZEMReader()
-    relay = RelayController()
-    db = Database()
-    manager = EnergyManager()
+    try:
+        pzem = PZEMReader()
+        relay = RelayController()
+        db = Database()
+        manager = EnergyManager()
+    except Exception as e:
+        print(f"[Mesure] Erreur init: {e}")
+        return
 
-    while running:
+    while not shutdown.is_set():
         try:
             mesures = pzem.read_all()
             manager.evaluate(mesures)
@@ -58,70 +55,58 @@ def measurement_loop():
             )
 
         except Exception as e:
-            print(f"[Main] Erreur boucle mesure: {e}")
+            print(f"[Mesure] Erreur: {e}")
 
-        time.sleep(MEASURE_INTERVAL_SECONDS)
+        shutdown.wait(MEASURE_INTERVAL_SECONDS)
 
 
 def weather_loop():
     weather = WeatherForecast()
-    while running:
+    while not shutdown.is_set():
         try:
             weather.update_forecast()
             alert = weather.check_tomorrow()
             if alert and alert.get("alert"):
-                db = Database()
-                db.insert_evenement("meteo", alert["message"], "warning")
+                Database().insert_evenement("meteo", alert["message"], "warning")
         except Exception as e:
-            print(f"[Main] Erreur météo: {e}")
-
-        for _ in range(OWM_FORECAST_INTERVAL_HOURS * 3600 // 10):
-            if not running:
-                break
-            time.sleep(10)
-
-
-def cleanup():
-    print("Nettoyage des ressources...")
-    pzem = PZEMReader()
-    relay = RelayController()
-    pzem.close()
-    relay.cleanup()
-    db = Database()
-    db.close()
-    scheduler.shutdown(wait=False)
-    print("Système arrêté.")
+            print(f"[Meteo] Erreur: {e}")
+        shutdown.wait(OWM_FORECAST_INTERVAL_HOURS * 3600)
 
 
 def main():
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
-
-    print("Démarrage du système de gestion d'énergie...")
+    print("Demarrage du systeme de gestion d'energie...")
 
     db = Database()
     db._init_db()
 
-    scheduler.add_job(
-        db.purge_old_data,
-        "interval",
-        hours=24,
-        id="purge",
-        replace_existing=True,
-    )
+    scheduler.add_job(db.purge_old_data, "interval", hours=24, id="purge", replace_existing=True)
     scheduler.start()
 
-    measure_thread = threading.Thread(target=measurement_loop, daemon=True)
-    measure_thread.start()
+    t1 = threading.Thread(target=measurement_loop, daemon=True)
+    t2 = threading.Thread(target=weather_loop, daemon=True)
+    t1.start()
+    t2.start()
+    print("Threads mesure et meteo demarres.")
 
-    weather_thread = threading.Thread(target=weather_loop, daemon=True)
-    weather_thread.start()
-
-    print(f"Serveur web démarré sur http://{FLASK_HOST}:{FLASK_PORT}")
     app = create_app()
-    app.run(host=FLASK_HOST, port=FLASK_PORT, debug=False, use_reloader=False)
+    host = "127.0.0.1"
+    print(f"Serveur web: http://{host}:{FLASK_PORT}")
+    print("Ouvrez http://127.0.0.1:5000 dans votre navigateur.")
+    print("Ctrl+C pour arreter.")
 
-    cleanup()
+    try:
+        app.run(host=host, port=FLASK_PORT, debug=False, use_reloader=False)
+    except KeyboardInterrupt:
+        pass
+    except SystemExit:
+        pass
+    except Exception as e:
+        print(f"Erreur serveur: {e}")
+
+    shutdown.set()
+    print("Arret en cours...")
+    scheduler.shutdown(wait=False)
+    print("Systeme arrete.")
 
 
 if __name__ == "__main__":
