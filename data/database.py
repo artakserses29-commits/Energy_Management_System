@@ -147,6 +147,14 @@ class Database:
         conn.execute("DELETE FROM etat_sources WHERE timestamp < ?", (cutoff,))
         conn.commit()
 
+    def clear_all(self):
+        conn = self._get_conn()
+        conn.execute("DELETE FROM mesures")
+        conn.execute("DELETE FROM evenements")
+        conn.execute("DELETE FROM etat_sources")
+        conn.execute("DELETE FROM previsions")
+        conn.commit()
+
     def close(self):
         if hasattr(self._local, "conn") and self._local.conn:
             self._local.conn.close()

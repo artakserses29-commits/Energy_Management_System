@@ -75,6 +75,7 @@ def main():
 
     db = Database()
     db._init_db()
+    db.clear_all()
 
     scheduler.add_job(db.purge_old_data, "interval", hours=24, id="purge", replace_existing=True)
     scheduler.start()

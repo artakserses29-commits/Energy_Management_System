@@ -60,13 +60,11 @@ class EnergyManager:
                 return SourceState.SOLAIRE
             return SourceState.JIRAMA
 
-        if battery_soc is not None and battery_soc > BATTERY_SOC_THRESHOLD_LOW:
-            if battery_power < 0:
-                return SourceState.BATTERIE
-            return SourceState.BATTERIE
-
         if jirama_power > 1:
             return SourceState.JIRAMA
+
+        if battery_soc is not None and battery_soc > BATTERY_SOC_THRESHOLD_LOW:
+            return SourceState.BATTERIE
 
         return SourceState.GROUPE
 
