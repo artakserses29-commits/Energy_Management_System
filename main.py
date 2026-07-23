@@ -1,6 +1,7 @@
 import sys
 import threading
 import time
+from urllib.request import urlopen
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
@@ -9,8 +10,12 @@ from core.energy_manager import EnergyManager
 from core.weather import WeatherForecast
 from data.database import Database
 from hardware.pzem_reader import PZEMReader
-from hardware.relay_controller import RelayController
 from web.app import create_app
+
+try:
+    from waitress import serve
+except ImportError:
+    serve = None
 
 shutdown = threading.Event()
 scheduler = BackgroundScheduler()
@@ -19,7 +24,6 @@ scheduler = BackgroundScheduler()
 def measurement_loop():
     try:
         pzem = PZEMReader()
-        relay = RelayController()
         db = Database()
         manager = EnergyManager()
     except Exception as e:
@@ -86,16 +90,19 @@ def main():
     t2 = threading.Thread(target=weather_loop, daemon=True)
     t1.start()
     t2.start()
-    print("Threads mesure et meteo demarres.")
 
     app = create_app()
     host = "127.0.0.1"
-    print(f"Serveur web: http://{host}:{FLASK_PORT}")
+    url = f"http://{host}:{FLASK_PORT}"
+    print(f"Serveur web: {url}")
     print("Ouvrez http://127.0.0.1:5000 dans votre navigateur.")
     print("Ctrl+C pour arreter.")
 
     try:
-        app.run(host=host, port=FLASK_PORT, debug=False, use_reloader=False)
+        if serve:
+            serve(app, host=host, port=FLASK_PORT)
+        else:
+            app.run(host=host, port=FLASK_PORT, debug=False, use_reloader=False)
     except KeyboardInterrupt:
         pass
     except SystemExit:
