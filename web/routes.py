@@ -1,11 +1,9 @@
 import json
 
 from flask import Blueprint, jsonify, render_template, request
-from flask_socketio import emit
 
 from core.energy_manager import EnergyManager
 from data.database import Database
-from web.app import socketio
 
 main_bp = Blueprint("main", __name__)
 api_bp = Blueprint("api", __name__)
@@ -81,16 +79,3 @@ def set_mode():
 def derniere_prevision():
     prev = db.get_derniere_prevision()
     return jsonify(prev)
-
-
-@socketio.on("connect")
-def handle_connect():
-    emit("connected", {"message": "Connecte au serveur"})
-
-
-def broadcast_data(mesures, status):
-    socketio.emit("update", {"mesures": mesures, "status": status})
-
-
-def broadcast_event(event):
-    socketio.emit("event", event)

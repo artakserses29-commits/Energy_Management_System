@@ -2,11 +2,8 @@ import json
 import os
 
 from flask import Flask
-from flask_socketio import SocketIO
 
-from config.settings import SECRET_KEY, FLASK_HOST, FLASK_PORT, FLASK_DEBUG
-
-socketio = SocketIO()
+from config.settings import SECRET_KEY
 
 
 def create_app():
@@ -17,8 +14,6 @@ def create_app():
     from web.routes import main_bp, api_bp
     app.register_blueprint(main_bp)
     app.register_blueprint(api_bp, url_prefix="/api")
-
-    socketio.init_app(app, cors_allowed_origins="*")
 
     @app.context_processor
     def inject_locale():
@@ -32,8 +27,3 @@ def create_app():
         return dict(locale=locale, lang=lang)
 
     return app
-
-
-def run_server():
-    app = create_app()
-    socketio.run(app, host=FLASK_HOST, port=FLASK_PORT, debug=FLASK_DEBUG)

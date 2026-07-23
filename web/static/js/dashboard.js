@@ -151,4 +151,25 @@ async function loadInitialData() {
     }
 }
 
+window.refreshEvents = function (events) {
+    const list = document.getElementById("events-list");
+    if (!list) return;
+    if (events.length === 0) return;
+    events.reverse();
+    events.forEach((e) => {
+        const existing = list.querySelector(`[data-id="${e.id}"]`);
+        if (!existing) {
+            const item = document.createElement("div");
+            item.className = `event-item event-level-${e.level || "info"}`;
+            item.setAttribute("data-id", e.id);
+            const ts = e.timestamp ? new Date(e.timestamp).toLocaleTimeString() : "";
+            item.innerHTML = `<span>${e.message || ""}</span><span class="event-time">${ts}</span>`;
+            list.prepend(item);
+            while (list.children.length > 50) {
+                list.removeChild(list.lastChild);
+            }
+        }
+    });
+};
+
 document.addEventListener("DOMContentLoaded", loadInitialData);

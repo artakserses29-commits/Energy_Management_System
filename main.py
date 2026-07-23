@@ -5,14 +5,13 @@ import time
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
-from config.settings import MEASURE_INTERVAL_SECONDS, OWM_FORECAST_INTERVAL_HOURS
+from config.settings import MEASURE_INTERVAL_SECONDS, OWM_FORECAST_INTERVAL_HOURS, FLASK_HOST, FLASK_PORT
 from core.energy_manager import EnergyManager
 from core.weather import WeatherForecast
 from data.database import Database
 from hardware.pzem_reader import PZEMReader
 from hardware.relay_controller import RelayController
 from web.app import create_app
-from web.routes import broadcast_data, broadcast_event
 
 scheduler = BackgroundScheduler()
 running = True
@@ -58,8 +57,6 @@ def measurement_loop():
                 mode=status["mode"],
             )
 
-            broadcast_data(mesures, status)
-
         except Exception as e:
             print(f"[Main] Erreur boucle mesure: {e}")
 
@@ -75,11 +72,6 @@ def weather_loop():
             if alert and alert.get("alert"):
                 db = Database()
                 db.insert_evenement("meteo", alert["message"], "warning")
-                broadcast_event({
-                    "message": alert["message"],
-                    "level": "warning",
-                    "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
-                })
         except Exception as e:
             print(f"[Main] Erreur météo: {e}")
 
@@ -125,10 +117,9 @@ def main():
     weather_thread = threading.Thread(target=weather_loop, daemon=True)
     weather_thread.start()
 
-    print(f"Serveur web démarré sur http://0.0.0.0:5000")
+    print(f"Serveur web démarré sur http://{FLASK_HOST}:{FLASK_PORT}")
     app = create_app()
-    from web.app import socketio
-    socketio.run(app, host="0.0.0.0", port=5000, allow_unsafe_werkzeug=True)
+    app.run(host=FLASK_HOST, port=FLASK_PORT, debug=False, use_reloader=False)
 
     cleanup()
 
