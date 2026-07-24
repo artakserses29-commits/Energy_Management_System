@@ -8,7 +8,7 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 
 from config.settings import FLASK_HOST, FLASK_PORT
-from core.energy_manager import EnergyManager
+from core.shared_state import set_mode
 from data.database import Database
 
 HERE = Path(__file__).parent
@@ -16,7 +16,6 @@ STATIC_DIR = HERE / "web" / "static"
 TEMPLATES_DIR = HERE / "web" / "templates"
 LOCALES_DIR = HERE / "web" / "locales"
 
-manager = EnergyManager()
 db = Database()
 
 
@@ -77,8 +76,18 @@ class Handler(BaseHTTPRequestHandler):
             self.send_file(LOCALES_DIR / "en.json", "application/json")
 
         elif path == "/api/status":
-            status = manager.get_status()
-            mesures = db.get_all_last_mesures()
+            etat, mesures = db.get_status_snapshot()
+            status = {
+                "current_state": etat.get("source_active", "solaire"),
+                "mode": etat.get("mode", "auto"),
+                "manual_source": None,
+                "relay_states": {
+                    "solaire": etat.get("source_active") == "solaire",
+                    "batterie": etat.get("source_active") == "batterie",
+                    "jirama": etat.get("source_active") == "jirama",
+                    "groupe": etat.get("source_active") == "groupe",
+                },
+            }
             self.send_json({"status": status, "mesures": mesures})
 
         elif path.startswith("/api/mesures"):
@@ -125,7 +134,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/mode":
             mode = data.get("mode", "auto")
             source = data.get("source")
-            manager.set_mode(mode, source)
+            set_mode(mode, source)
             db.insert_evenement("mode", f"Mode: {mode} source: {source}", "info")
             self.send_json({"success": True})
         else:
@@ -174,7 +183,7 @@ class Handler(BaseHTTPRequestHandler):
 def run_server(host="127.0.0.1", port=5000):
     server = HTTPServer((host, port), Handler)
     print(f"Serveur web: http://{host}:{port}")
-    print("Ouvrez http://127.0.0.1:5000 dans votre navigateur.")
+    print(f"Ouvrez http://127.0.0.1:{port} dans votre navigateur.")
     print("Ctrl+C pour arreter.")
     try:
         server.serve_forever()

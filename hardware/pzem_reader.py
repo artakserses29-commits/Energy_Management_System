@@ -54,6 +54,10 @@ class PZEMReader:
             except Exception as e:
                 print(f"[PZEM] Erreur connexion {name}: {e}")
 
+    def set_battery_soc(self, soc):
+        if self._use_simulation and self._sim is not None:
+            self._sim.set_battery_soc(soc)
+
     def read_all(self):
         if self._use_simulation:
             if self._sim is None:

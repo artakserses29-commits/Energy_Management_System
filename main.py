@@ -23,33 +23,92 @@ def measurement_loop():
         print(f"[Mesure] Erreur init: {e}")
         return
 
+    soc = None
     while not shutdown.is_set():
         try:
             mesures = pzem.read_all()
+            solar_power = mesures["solaire"]["power"]
+            conso = mesures["consommation"]["power"]
+            if soc is None:
+                soc = mesures["batterie"]["soc"]
+            mesures["batterie"]["soc"] = soc
+
             manager.evaluate(mesures)
             status = manager.get_status()
+            state = status["current_state"]
 
-            for source, data in mesures.items():
-                db.insert_mesure(
-                    source=source,
-                    voltage=data.get("voltage", 0),
-                    current=data.get("current", 0),
-                    power=data.get("power", 0),
-                    energy=data.get("energy", 0),
-                    soc=data.get("soc"),
-                    frequency=data.get("frequency"),
-                    power_factor=data.get("power_factor"),
-                )
+            deficit = conso - solar_power
 
-            db.insert_etat(
-                source_active=status["current_state"],
-                batterie_soc=mesures.get("batterie", {}).get("soc"),
-                solaire_power=mesures.get("solaire", {}).get("power", 0),
-                batterie_power=mesures.get("batterie", {}).get("power", 0),
-                jirama_power=mesures.get("jirama", {}).get("power", 0),
-                conso_power=mesures.get("consommation", {}).get("power", 0),
-                mode=status["mode"],
-            )
+            if deficit <= 0:
+                battery_power = -deficit
+                if soc >= 100:
+                    battery_power = 0
+                mesures["jirama"]["power"] = 0
+                mesures["groupe"]["power"] = 0
+            else:
+                if state in ("solaire", "batterie"):
+                    battery_power = -deficit
+                    mesures["jirama"]["power"] = 0
+                    mesures["groupe"]["power"] = 0
+                elif state == "jirama":
+                    if soc >= 100:
+                        battery_power = 0
+                        mesures["jirama"]["power"] = round(deficit)
+                    else:
+                        recharge = round(deficit * 0.3)
+                        battery_power = recharge
+                        mesures["jirama"]["power"] = round(deficit + recharge)
+                    mesures["groupe"]["power"] = 0
+                elif state == "groupe":
+                    if soc >= 100:
+                        battery_power = 0
+                        mesures["groupe"]["power"] = round(deficit)
+                    else:
+                        recharge = round(deficit * 0.3)
+                        battery_power = recharge
+                        mesures["groupe"]["power"] = round(deficit + recharge)
+                    mesures["jirama"]["power"] = 0
+
+            mesures["batterie"]["power"] = battery_power
+
+            if battery_power > 0:
+                soc = min(100, soc + battery_power * 0.015)
+            elif battery_power < 0:
+                soc = max(0, soc + battery_power * 0.02)
+            soc = round(soc, 1)
+            mesures["batterie"]["soc"] = soc
+            pzem.set_battery_soc(soc)
+
+            for src in ("jirama", "groupe"):
+                if src != state:
+                    mesures[src]["voltage"] = 0
+                    mesures[src]["current"] = 0
+                    mesures[src]["power"] = 0
+                    if "frequency" in mesures[src]:
+                        mesures[src]["frequency"] = 0
+                    if "power_factor" in mesures[src]:
+                        mesures[src]["power_factor"] = 0
+
+            p = abs(battery_power)
+            mesures["batterie"]["voltage"] = round(12 + soc * 0.016, 2)
+            mesures["batterie"]["current"] = round(p / 12.5, 3) if p > 5 else 0
+
+            if state == "jirama" or state == "groupe":
+                pj = mesures[state]["power"]
+                mesures[state]["voltage"] = 230
+                mesures[state]["current"] = round(pj / 230, 3) if pj > 0 else 0
+                mesures[state]["frequency"] = 50
+                mesures[state]["power_factor"] = 0.95
+
+            db.insert_snapshot(mesures, {
+                "source_active": state,
+                "batterie_soc": soc,
+                "solaire_power": solar_power,
+                "batterie_power": battery_power,
+                "jirama_power": mesures["jirama"]["power"],
+                "conso_power": conso,
+                "mode": status["mode"],
+            })
 
         except Exception as e:
             print(f"[Mesure] Erreur: {e}")

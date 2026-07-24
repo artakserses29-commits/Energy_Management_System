@@ -58,13 +58,20 @@ window.updateDashboard = function (data) {
 
 function updateCard(name, data) {
     if (!data) return;
-    const powerEl = document.getElementById(`${name}-power`);
-    const voltageEl = document.getElementById(`${name}-voltage`);
-    const currentEl = document.getElementById(`${name}-current`);
 
-    if (powerEl) powerEl.textContent = `${data.power || 0} W`;
-    if (voltageEl) voltageEl.textContent = data.voltage || 0;
-    if (currentEl) currentEl.textContent = data.current || 0;
+    ['power','voltage','current'].forEach(k => {
+        const el = document.getElementById(`${name}-${k}`);
+        if (el) el.textContent = k === 'power' ? `${data[k] || 0} W` : data[k] || 0;
+    });
+
+    const statusEl = document.getElementById(`${name}-status`);
+    if (statusEl) {
+        const active = name === "batterie"
+            ? (data.power || 0) < -1
+            : (data.power || 0) > 1;
+        statusEl.textContent = active ? "Actif" : "Inactif";
+        statusEl.className = `status-badge ${active ? "active" : "inactive"}`;
+    }
 
     if (name === "batterie") {
         const soc = data.soc || 0;
@@ -82,27 +89,9 @@ function updateCard(name, data) {
         if (socText) socText.textContent = `${soc}%`;
 
         if (flowEl) {
-            if (data.power > 5) flowEl.textContent = "🔋 Charge";
-            else if (data.power < -5) flowEl.textContent = "⚡ Décharge";
-            else flowEl.textContent = "○ Inactif";
-        }
-    }
-
-    if (name === "jirama") {
-        const statusEl = document.getElementById("jirama-status");
-        if (statusEl) {
-            const active = data.power > 1;
-            statusEl.textContent = active ? "Actif" : "Inactif";
-            statusEl.className = `status-badge ${active ? "active" : "inactive"}`;
-        }
-    }
-
-    if (name === "groupe") {
-        const statusEl = document.getElementById("groupe-status");
-        if (statusEl) {
-            const active = data.power > 1;
-            statusEl.textContent = active ? "Actif" : "Inactif";
-            statusEl.className = `status-badge ${active ? "active" : "inactive"}`;
+            if (data.power > 5) flowEl.textContent = "Charge";
+            else if (data.power < -5) flowEl.textContent = "Décharge";
+            else flowEl.textContent = "Inactif";
         }
     }
 }

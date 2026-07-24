@@ -6,6 +6,7 @@ from config.settings import (
     POWER_THRESHOLD_SOLAR_MIN,
     POWER_THRESHOLD_COMPLEMENT,
 )
+from core.shared_state import get_mode, set_mode
 from data.database import Database
 from hardware.relay_controller import RelayController
 from notifications.telegram_notifier import TelegramNotifier
@@ -17,6 +18,8 @@ class SourceState(Enum):
     BATTERIE = "batterie"
     JIRAMA = "jirama"
     GROUPE = "groupe"
+
+SOC_CRITICAL = 5
 
 
 class EnergyManager:
@@ -32,8 +35,11 @@ class EnergyManager:
         self._last_change_time = 0
 
     def evaluate(self, mesures):
-        if self.mode == "manuel" and self.manual_source:
-            self._apply_source(self.manual_source)
+        mode, manual_source = get_mode()
+        self.mode = mode
+        self.manual_source = manual_source
+        if mode == "manuel" and manual_source:
+            self._apply_source(manual_source)
             return
 
         import time
@@ -43,13 +49,20 @@ class EnergyManager:
         battery_soc = mesures.get("batterie", {}).get("soc", None)
         battery_power = mesures.get("batterie", {}).get("power", 0)
         consommation = mesures.get("consommation", {}).get("power", 0)
-        jirama_power = mesures.get("jirama", {}).get("power", 0)
+        jirama_voltage = mesures.get("jirama", {}).get("voltage", 0)
 
         new_state = self._decide(solar_power, battery_soc, battery_power,
-                                 consommation, jirama_power)
+                                 consommation, jirama_voltage)
+
+        JIRAMA_OK = jirama_voltage > 10
 
         if new_state != self.current_state:
-            if now - self._last_change_time >= 30:
+            emergency = (new_state == SourceState.GROUPE or
+                         battery_soc is not None and battery_soc <= SOC_CRITICAL or
+                         self.current_state in (SourceState.JIRAMA, SourceState.GROUPE)
+                         and not JIRAMA_OK)
+            debounce = 5 if emergency else 30
+            if now - self._last_change_time >= debounce:
                 self.last_state = self.current_state
                 self.current_state = new_state
                 self._last_change_time = now
@@ -58,19 +71,47 @@ class EnergyManager:
         self._apply_source(self.current_state.value)
 
     def _decide(self, solar_power, battery_soc, battery_power,
-                consommation, jirama_power):
+                consommation, jirama_voltage):
+        JIRAMA_OK = jirama_voltage > 10
+
+        if self.current_state == SourceState.JIRAMA:
+            if not JIRAMA_OK:
+                if battery_soc is not None and battery_soc > SOC_CRITICAL:
+                    return SourceState.BATTERIE
+                return SourceState.GROUPE
+            if battery_soc is not None and battery_soc >= BATTERY_SOC_THRESHOLD_HIGH:
+                if solar_power > POWER_THRESHOLD_SOLAR_MIN:
+                    return SourceState.SOLAIRE
+                return SourceState.BATTERIE
+            return SourceState.JIRAMA
+
+        if self.current_state == SourceState.GROUPE:
+            if battery_soc is not None and battery_soc >= BATTERY_SOC_THRESHOLD_HIGH:
+                if solar_power > POWER_THRESHOLD_SOLAR_MIN:
+                    return SourceState.SOLAIRE
+                if JIRAMA_OK:
+                    return SourceState.JIRAMA
+                return SourceState.BATTERIE
+            return SourceState.GROUPE
+
         if solar_power > POWER_THRESHOLD_SOLAR_MIN:
             if battery_soc is not None and battery_soc >= 100 and consommation <= solar_power:
                 return SourceState.SOLAIRE
             if battery_soc is None or battery_soc > BATTERY_SOC_THRESHOLD_LOW:
                 return SourceState.SOLAIRE
-            return SourceState.JIRAMA
-
-        if jirama_power > 1:
-            return SourceState.JIRAMA
+            if battery_soc is not None and battery_soc > SOC_CRITICAL:
+                return SourceState.BATTERIE
+            if JIRAMA_OK:
+                return SourceState.JIRAMA
+            return SourceState.GROUPE
 
         if battery_soc is not None and battery_soc > BATTERY_SOC_THRESHOLD_LOW:
             return SourceState.BATTERIE
+
+        if battery_soc is not None and battery_soc > SOC_CRITICAL:
+            if JIRAMA_OK:
+                return SourceState.JIRAMA
+            return SourceState.GROUPE
 
         return SourceState.GROUPE
 
@@ -102,8 +143,7 @@ class EnergyManager:
             self.relay.activate_only("groupe")
 
     def set_mode(self, mode, source=None):
-        self.mode = mode
-        self.manual_source = source
+        set_mode(mode, source)
         if mode == "auto":
             self.db.insert_evenement("mode", "Passage en mode automatique", "info")
         else:

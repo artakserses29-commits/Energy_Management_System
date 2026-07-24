@@ -7,87 +7,51 @@ class SimulationReader:
     def __init__(self):
         self.start_time = time.time()
         self._battery_soc = 75.0
-        self._jirama_on = False
-        self._groupe_on = False
+        self._jirama_available = False
+        self._jirama_timer = 0
+
+    def set_battery_soc(self, soc):
+        self._battery_soc = max(0, min(100, soc))
 
     def read_all(self):
         minute = self._get_minute()
         hour = minute / 600 * 24
 
-        solar_power = self._solar_at(hour)
+        solar_power = round(self._solar_at(hour), 1)
         consommation = round(50 + random.uniform(-10, 20), 1)
 
-        # État initial des sources (sauf batterie)
-        if self._battery_soc < 10 and solar_power == 0 and not self._groupe_on:
-            self._groupe_on = True
-            self._jirama_on = False
-        elif self._battery_soc < 30 and solar_power == 0 and not self._jirama_on and not self._groupe_on:
-            self._jirama_on = True
+        self._jirama_timer += 1
+        if self._jirama_available and self._jirama_timer > random.randint(30, 60):
+            self._jirama_available = False
+            self._jirama_timer = 0
+        elif not self._jirama_available and self._jirama_timer > random.randint(40, 80):
+            self._jirama_available = True
+            self._jirama_timer = 0
 
-        # Définir les puissances des sources
-        if self._groupe_on:
-            groupe_power = round(consommation + random.uniform(5, 20), 1)
-            jirama_power = 0
-        elif self._jirama_on:
-            jirama_power = round(consommation + random.uniform(5, 20), 1)
-            groupe_power = 0
+        if self._jirama_available:
+            jirama = {"voltage": 230, "current": 0, "power": 0, "frequency": 50, "power_factor": 0.95}
         else:
-            jirama_power = 0
-            groupe_power = 0
-
-        # Loi de conservation : batterie = solaire + jirama + groupe - conso
-        battery_power = round(solar_power + jirama_power + groupe_power - consommation, 1)
-
-        # Mise à jour du SOC basée sur la puissance batterie
-        if battery_power > 0:
-            self._battery_soc = min(100, self._battery_soc + battery_power * 0.015)
-        elif battery_power < 0:
-            self._battery_soc = max(0, self._battery_soc + battery_power * 0.02)
-
-        self._battery_soc = round(max(0, min(100, self._battery_soc)), 1)
-
-        # Vérifier les seuils de fin pour JIRAMA/Groupe
-        if self._groupe_on and self._battery_soc >= 80:
-            self._groupe_on = False
-        if self._jirama_on and not self._groupe_on and self._battery_soc >= 80:
-            self._jirama_on = False
+            jirama = {"voltage": 0, "current": 0, "power": 0, "frequency": 0, "power_factor": 0}
 
         return {
             "solaire": {
                 "voltage": round(24 + random.uniform(-0.5, 0.5), 1),
                 "current": round(solar_power / 24, 3) if solar_power > 0 else 0,
-                "power": round(solar_power, 1),
-                "energy": round(solar_power * 0.001, 3),
+                "power": solar_power,
                 "soc": None,
             },
             "batterie": {
                 "voltage": round(12 + self._battery_soc * 0.016 + random.uniform(-0.05, 0.05), 2),
-                "current": round(abs(battery_power) / 12.5, 3) if abs(battery_power) > 0.5 else 0,
-                "power": battery_power,
-                "energy": round(500 * self._battery_soc / 100, 1),
+                "current": 0,
+                "power": 0,
                 "soc": self._battery_soc,
             },
-            "jirama": {
-                "voltage": round(230 + random.uniform(-2, 2), 1) if jirama_power > 0 else 0,
-                "current": round(jirama_power / 230, 3) if jirama_power > 0 else 0,
-                "power": jirama_power,
-                "energy": round(jirama_power * 0.001, 3),
-                "frequency": round(50 + random.uniform(-0.1, 0.1), 1) if jirama_power > 0 else 0,
-                "power_factor": round(0.95 + random.uniform(-0.02, 0.02), 2) if jirama_power > 0 else 0,
-            },
-            "groupe": {
-                "voltage": round(230 + random.uniform(-3, 3), 1) if groupe_power > 0 else 0,
-                "current": round(groupe_power / 230, 3) if groupe_power > 0 else 0,
-                "power": groupe_power,
-                "energy": round(groupe_power * 0.001, 3),
-                "frequency": round(50 + random.uniform(-0.5, 0.5), 1) if groupe_power > 0 else 0,
-                "power_factor": round(0.9 + random.uniform(-0.05, 0.05), 2) if groupe_power > 0 else 0,
-            },
+            "jirama": jirama,
+            "groupe": {"voltage": 0, "current": 0, "power": 0, "frequency": 0, "power_factor": 0},
             "consommation": {
                 "voltage": round(230 + random.uniform(-2, 2), 1),
                 "current": round(consommation / 230, 3),
                 "power": consommation,
-                "energy": round(consommation * 0.001, 3),
                 "frequency": round(50 + random.uniform(-0.1, 0.1), 1),
                 "power_factor": round(0.95 + random.uniform(-0.02, 0.02), 2),
             },
@@ -102,7 +66,7 @@ class SimulationReader:
             base = math.sin(angle) * 800
             noise = random.uniform(-30, 30)
             cloud_factor = random.choice([0.3, 0.6, 0.8, 1.0])
-            return max(0, round((base + noise) * cloud_factor, 1))
+            return max(0, (base + noise) * cloud_factor)
         return 0
 
     def close(self):

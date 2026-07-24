@@ -29,7 +29,7 @@ class Database:
             Path(DATABASE_PATH).parent.mkdir(parents=True, exist_ok=True)
             self._local.conn = sqlite3.connect(DATABASE_PATH)
             self._local.conn.row_factory = sqlite3.Row
-            self._local.conn.execute("PRAGMA journal_mode=WAL")
+            self._local.conn.execute("PRAGMA journal_mode=DELETE")
         return self._local.conn
 
     def _init_db(self):
@@ -45,6 +45,27 @@ class Database:
             """INSERT INTO mesures (source, voltage, current, power, energy, soc, frequency, power_factor)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
             (source, voltage, current, power, energy, soc, frequency, power_factor),
+        )
+        conn.commit()
+
+    def insert_snapshot(self, mesures_dict, etat_data):
+        conn = self._get_conn()
+        for source, data in mesures_dict.items():
+            conn.execute(
+                """INSERT INTO mesures (source, voltage, current, power, energy, soc, frequency, power_factor)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (source, data.get("voltage", 0), data.get("current", 0),
+                 data.get("power", 0), data.get("energy", 0), data.get("soc"),
+                 data.get("frequency"), data.get("power_factor")),
+            )
+        conn.execute(
+            """INSERT INTO etat_sources (source_active, batterie_soc, solaire_power,
+               batterie_power, jirama_power, consommation_power, mode)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (etat_data["source_active"], etat_data["batterie_soc"],
+             etat_data["solaire_power"], etat_data["batterie_power"],
+             etat_data["jirama_power"], etat_data["conso_power"],
+             etat_data["mode"]),
         )
         conn.commit()
 
@@ -90,15 +111,21 @@ class Database:
     def get_last_mesure_by_source(self, source):
         conn = self._get_conn()
         row = conn.execute(
-            "SELECT * FROM mesures WHERE source = ? ORDER BY timestamp DESC LIMIT 1",
+            "SELECT * FROM mesures WHERE source = ? ORDER BY id DESC LIMIT 1",
             (source,),
         ).fetchone()
         return dict(row) if row else {}
 
     def get_all_last_mesures(self):
+        conn = self._get_conn()
         result = {}
         for source in ("solaire", "batterie", "jirama", "groupe", "consommation"):
-            result[source] = self.get_last_mesure_by_source(source)
+            result[source] = dict(
+                conn.execute(
+                    "SELECT * FROM mesures WHERE source = ? ORDER BY id DESC LIMIT 1",
+                    (source,),
+                ).fetchone() or {}
+            )
         return result
 
     def get_recent_mesures(self, source, limit=50):
@@ -124,6 +151,29 @@ class Database:
             "SELECT * FROM evenements ORDER BY id DESC LIMIT ?", (limit,)
         ).fetchall()
         return [dict(r) for r in rows]
+
+    def get_dernier_etat(self):
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT * FROM etat_sources ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        return dict(row) if row else {}
+
+    def get_status_snapshot(self):
+        conn = self._get_conn()
+        conn.execute("BEGIN")
+        etat = conn.execute(
+            "SELECT * FROM etat_sources ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        mesures = {}
+        for source in ("solaire", "batterie", "jirama", "groupe", "consommation"):
+            row = conn.execute(
+                "SELECT * FROM mesures WHERE source = ? ORDER BY id DESC LIMIT 1",
+                (source,),
+            ).fetchone()
+            mesures[source] = dict(row) if row else {}
+        conn.execute("COMMIT")
+        return dict(etat) if etat else {}, mesures
 
     def get_derniere_prevision(self):
         conn = self._get_conn()
