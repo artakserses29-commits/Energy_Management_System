@@ -29,11 +29,15 @@ class EnergyManager:
         self.last_state = None
         self.mode = "auto"
         self.manual_source = None
+        self._last_change_time = 0
 
     def evaluate(self, mesures):
         if self.mode == "manuel" and self.manual_source:
             self._apply_source(self.manual_source)
             return
+
+        import time
+        now = time.time()
 
         solar_power = mesures.get("solaire", {}).get("power", 0)
         battery_soc = mesures.get("batterie", {}).get("soc", None)
@@ -45,9 +49,11 @@ class EnergyManager:
                                  consommation, jirama_power)
 
         if new_state != self.current_state:
-            self.last_state = self.current_state
-            self.current_state = new_state
-            self._on_state_change()
+            if now - self._last_change_time >= 30:
+                self.last_state = self.current_state
+                self.current_state = new_state
+                self._last_change_time = now
+                self._on_state_change()
 
         self._apply_source(self.current_state.value)
 

@@ -82,8 +82,8 @@ function updateCard(name, data) {
         if (socText) socText.textContent = `${soc}%`;
 
         if (flowEl) {
-            if (data.power > 5) flowEl.textContent = "🔋 Charge";
-            else if (data.power < -5) flowEl.textContent = "⚡ Décharge";
+            if (data.power < -5) flowEl.textContent = "🔋 Charge";
+            else if (data.power > 5) flowEl.textContent = "⚡ Décharge";
             else flowEl.textContent = "○ Inactif";
         }
     }

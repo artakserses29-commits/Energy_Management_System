@@ -19,7 +19,7 @@ class SimulationReader:
 
         if self._groupe_on:
             groupe_power = round(consommation + random.uniform(5, 20), 1)
-            self._battery_soc = min(100, self._battery_soc + 3)
+            self._battery_soc = min(100, self._battery_soc + 4)
             jirama_power = 0
             battery_power = 0
             if self._battery_soc >= 80:
@@ -28,7 +28,7 @@ class SimulationReader:
 
         elif self._jirama_on:
             jirama_power = round(consommation + random.uniform(5, 20), 1)
-            self._battery_soc = min(100, self._battery_soc + 0.8)
+            self._battery_soc = min(100, self._battery_soc + 0.5)
             groupe_power = 0
             battery_power = 0
             if self._battery_soc >= 80:
@@ -58,7 +58,7 @@ class SimulationReader:
 
         if self._battery_soc < 30 and solar_power == 0 and not self._jirama_on and not self._groupe_on:
             self._jirama_on = True
-        if self._battery_soc < 15 and self._jirama_on and not self._groupe_on:
+        if self._battery_soc < 10 and self._jirama_on and not self._groupe_on:
             self._jirama_on = False
             self._groupe_on = True
 

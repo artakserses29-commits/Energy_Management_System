@@ -11,9 +11,13 @@ class WeatherForecast:
     def __init__(self):
         self.db = Database()
         self._cache = {}
+        self._simulated = False
 
     def update_forecast(self):
         if not OWM_API_KEY:
+            if not self._simulated:
+                self._simulate_forecast()
+                self._simulated = True
             return
         try:
             url = (
@@ -27,6 +31,26 @@ class WeatherForecast:
             self._process_forecast(data["daily"])
         except Exception as e:
             print(f"[Weather] Erreur: {e}")
+
+    def _simulate_forecast(self):
+        today = datetime.now().date()
+        profiles = [
+            (10, 8, "Bonne production solaire attendue"),
+            (40, 5, "Journee partiellement nuageuse - Surveiller la production"),
+            (75, 2, "Journee tres nuageuse - Precharger la batterie et preparer JIRAMA"),
+            (20, 7, "Bonne production solaire attendue"),
+            (60, 3, "Journee partiellement nuageuse - Surveiller la production"),
+        ]
+        for i, (clouds, uvi, rec) in enumerate(profiles):
+            date = today + timedelta(days=i)
+            production = self._estimate_production(clouds, uvi)
+            self.db.insert_prevision(
+                date_prev=date.isoformat(),
+                couverture=clouds,
+                irradiance=uvi,
+                production_estimee=production,
+                recommandation=rec,
+            )
 
     def _process_forecast(self, daily_data):
         for day in daily_data[:5]:
