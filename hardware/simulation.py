@@ -17,50 +17,40 @@ class SimulationReader:
         solar_power = self._solar_at(hour)
         consommation = round(50 + random.uniform(-10, 20), 1)
 
+        # État initial des sources (sauf batterie)
+        if self._battery_soc < 10 and solar_power == 0 and not self._groupe_on:
+            self._groupe_on = True
+            self._jirama_on = False
+        elif self._battery_soc < 30 and solar_power == 0 and not self._jirama_on and not self._groupe_on:
+            self._jirama_on = True
+
+        # Définir les puissances des sources
         if self._groupe_on:
             groupe_power = round(consommation + random.uniform(5, 20), 1)
-            self._battery_soc = min(100, self._battery_soc + 4)
             jirama_power = 0
-            battery_power = 0
-            if self._battery_soc >= 80:
-                self._groupe_on = False
-                self._jirama_on = False
-
         elif self._jirama_on:
             jirama_power = round(consommation + random.uniform(5, 20), 1)
-            self._battery_soc = min(100, self._battery_soc + 0.5)
             groupe_power = 0
-            battery_power = 0
-            if self._battery_soc >= 80:
-                self._jirama_on = False
-
-        elif solar_power > consommation + 5:
-            surplus = solar_power - consommation
-            self._battery_soc = min(100, self._battery_soc + surplus * 0.001)
-            battery_power = round(-surplus, 1)
-            jirama_power = 0
-            groupe_power = 0
-
-        elif solar_power > 0:
-            deficit = consommation - solar_power
-            self._battery_soc = max(0, self._battery_soc - deficit * 0.002)
-            battery_power = round(deficit, 1)
-            jirama_power = 0
-            groupe_power = 0
-
         else:
-            self._battery_soc = max(0, self._battery_soc - consommation * 0.02)
-            battery_power = round(consommation, 1)
             jirama_power = 0
             groupe_power = 0
+
+        # Loi de conservation : batterie = solaire + jirama + groupe - conso
+        battery_power = round(solar_power + jirama_power + groupe_power - consommation, 1)
+
+        # Mise à jour du SOC basée sur la puissance batterie
+        if battery_power > 0:
+            self._battery_soc = min(100, self._battery_soc + battery_power * 0.015)
+        elif battery_power < 0:
+            self._battery_soc = max(0, self._battery_soc + battery_power * 0.02)
 
         self._battery_soc = round(max(0, min(100, self._battery_soc)), 1)
 
-        if self._battery_soc < 30 and solar_power == 0 and not self._jirama_on and not self._groupe_on:
-            self._jirama_on = True
-        if self._battery_soc < 10 and self._jirama_on and not self._groupe_on:
+        # Vérifier les seuils de fin pour JIRAMA/Groupe
+        if self._groupe_on and self._battery_soc >= 80:
+            self._groupe_on = False
+        if self._jirama_on and not self._groupe_on and self._battery_soc >= 80:
             self._jirama_on = False
-            self._groupe_on = True
 
         return {
             "solaire": {
@@ -73,7 +63,7 @@ class SimulationReader:
             "batterie": {
                 "voltage": round(12 + self._battery_soc * 0.016 + random.uniform(-0.05, 0.05), 2),
                 "current": round(abs(battery_power) / 12.5, 3) if abs(battery_power) > 0.5 else 0,
-                "power": round(battery_power, 1),
+                "power": battery_power,
                 "energy": round(500 * self._battery_soc / 100, 1),
                 "soc": self._battery_soc,
             },
